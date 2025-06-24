@@ -1,0 +1,81 @@
+# https://taskfile.dev
+
+version: '3'
+silent: true
+output: 'prefixed'
+
+set: [pipefail]
+shopt: [globstar]
+
+vars:
+  CONTAINER_BUILDER: '{{ .CONTAINER_BUILDER | default "podman" }}'
+  CONTAINER_NAME: buildkitd
+
+  BUILDKIT_BUILD_ARGS:
+    - --frontend gateway.v0
+    - --opt source=docker/dockerfile:1.17
+    - --opt filename=Containerfile
+    - --output type=oci,name=icaros,dest=build/icaros.tar
+
+tasks:
+  start-buildkitd:
+    cmds:
+      - '{{ .CONTAINER_BUILDER }} run -d --name {{ .CONTAINER_NAME }} --privileged moby/buildkit:latest'
+    # Don't run if daemonless is set or container already exists
+    status:
+      - '{{ .CONTAINER_BUILDER }} container inspect {{ .CONTAINER_NAME }} | jq -e ".[0].State.Running"'
+
+  build:
+    deps:
+      - start-buildkitd
+    sources:
+      - Containerfile
+    generates:
+      - build/icaros.tar
+    cmds:
+      - |-
+        buildctl \
+          --addr={{ .CONTAINER_BUILDER }}-container://{{ .CONTAINER_NAME }} \
+          build \
+          --local context=. \
+          --local dockerfile=. \
+          {{ join " " .BUILDKIT_BUILD_ARGS }}
+
+  build-daemonless:
+    aliases:
+      - daemonless
+    sources:
+      - Containerfile
+    generates:
+      - build/icaros.tar
+    cmds:
+      - |-
+        {{ .CONTAINER_BUILDER }} run \
+          -it \
+          --rm \
+          --security-opt seccomp=unconfined \
+          --security-opt apparmor=unconfined \
+          -e BUILDKITD_FLAGS=--oci-worker-no-process-sandbox \
+          -v {{ .TASK_DIR }}:/tmp/work \
+          --entrypoint buildctl-daemonless.sh \
+          moby/buildkit:latest \
+          build \
+          --local context=/tmp/work \
+          --local dockerfile=/tmp/work \
+          {{ join " " .BUILDKIT_BUILD_ARGS }}
+
+  load:
+    deps:
+      - build
+    sources:
+      - build/icaros.tar
+    cmds:
+      - '{{ .CONTAINER_BUILDER }} load --input build/icaros.tar'
+
+  test:
+    aliases:
+      - default
+    deps:
+      - load
+    cmds:
+      - '{{ .CONTAINER_BUILDER }} run --rm docker.io/library/icaros:latest'
