@@ -6,7 +6,5 @@ brew "go-task"
 brew "hadolint"
 # Lightweight and flexible command-line JSON processor
 brew "jq"
-# Tool for managing OCI containers and pods
-brew "podman"
 # Framework for managing multi-language pre-commit hooks
 brew "pre-commit"
