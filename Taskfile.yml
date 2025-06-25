@@ -8,6 +8,9 @@ set: [pipefail]
 shopt: [globstar]
 
 vars:
+  STAGES:
+    - 0-toolchain
+
   CONTAINER_BUILDER: '{{ .CONTAINER_BUILDER | default "podman" }}'
   CONTAINER_BUILDER_ARGS: ""
   DAEMON_CONTAINER_NAME: buildkitd
@@ -20,6 +23,7 @@ tasks:
     status:
       - "{{ .CONTAINER_BUILDER }} {{.CONTAINER_BUILDER_ARGS}} container inspect {{ .DAEMON_CONTAINER_NAME }} | jq -e '.[0].State.Running'"
 
+  # Each stage is expected to output an image with the name "icaros/{{.NAME}}:latest"
   build:*:
     vars:
       NAME: "{{ index .MATCH 0 }}"
@@ -27,6 +31,8 @@ tasks:
       OUTPUT_TYPE: docker
     label: build:{{ .NAME }}
     prefix: build:{{ .NAME }}
+    deps:
+      - start-buildkitd
     sources:
       - "{{ .NAME }}/Containerfile"
     cmds:
@@ -44,12 +50,8 @@ tasks:
 
   build:
     deps:
-      - start-buildkitd
-    sources:
-      - "**/Containerfile"
-    cmds:
       - for:
-          - 0-toolchain
+          var: STAGES
         task: build:{{ .ITEM }}
 
   test:
