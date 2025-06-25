@@ -1,29 +1,53 @@
 # https://taskfile.dev
 
-version: '3'
+version: "3"
 silent: true
-output: 'prefixed'
+output: "prefixed"
 
 set: [pipefail]
 shopt: [globstar]
 
 vars:
   CONTAINER_BUILDER: '{{ .CONTAINER_BUILDER | default "podman" }}'
-  CONTAINER_NAME: buildkitd
-
-  BUILDKIT_BUILD_ARGS:
-    - --frontend gateway.v0
-    - --opt source=docker/dockerfile:1.17
-    - --opt filename=Containerfile
-    - --output type=oci,name=icaros,dest=build/icaros.tar
+  DAEMON_CONTAINER_NAME: buildkitd
 
 tasks:
   start-buildkitd:
     cmds:
-      - '{{ .CONTAINER_BUILDER }} run -d --name {{ .CONTAINER_NAME }} --privileged moby/buildkit:latest'
+      - "{{ .CONTAINER_BUILDER }} run -d --name {{ .DAEMON_CONTAINER_NAME }} --privileged moby/buildkit:latest"
     # Don't run if daemonless is set or container already exists
     status:
-      - '{{ .CONTAINER_BUILDER }} container inspect {{ .CONTAINER_NAME }} | jq -e ".[0].State.Running"'
+      - "{{ .CONTAINER_BUILDER }} container inspect {{ .DAEMON_CONTAINER_NAME }} | jq -e '.[0].State.Running'"
+
+  mkdir-build:
+    cmds:
+      - mkdir {{ .TASK_DIR }}/build
+    status:
+      - "[ -d {{ .TASK_DIR }}/build ]"
+
+  build:*:
+    vars:
+      NAME: "{{ index .MATCH 0 }}"
+    label: build:{{ .NAME }}
+    prefix: build:{{ .NAME }}
+    deps:
+      - mkdir-build
+    sources:
+      - "{{ .NAME }}/Containerfile"
+    generates:
+      - "{{ .TASK_DIR }}/build/{{ .NAME }}.tar"
+    cmds:
+      - |-
+        buildctl \
+          --addr={{ .CONTAINER_BUILDER }}-container://{{ .DAEMON_CONTAINER_NAME }} \
+          build \
+          --frontend gateway.v0 \
+          --opt filename=Containerfile \
+          --opt source=docker/dockerfile:1.17 \
+          --local context=stages/{{ .NAME }} \
+          --local dockerfile=stages/{{ .NAME }} \
+          --output type=oci,name=icaros/{{ .NAME }},dest={{ .TASK_DIR }}/build/{{ .NAME }}.tar
+      - "{{ .CONTAINER_BUILDER }} load --input {{ .TASK_DIR }}/build/{{ .NAME }}.tar"
 
   build:
     deps:
@@ -33,49 +57,18 @@ tasks:
     generates:
       - build/icaros.tar
     cmds:
-      - |-
-        buildctl \
-          --addr={{ .CONTAINER_BUILDER }}-container://{{ .CONTAINER_NAME }} \
-          build \
-          --local context=. \
-          --local dockerfile=. \
-          {{ join " " .BUILDKIT_BUILD_ARGS }}
-
-  build-daemonless:
-    aliases:
-      - daemonless
-    sources:
-      - Containerfile
-    generates:
-      - build/icaros.tar
-    cmds:
-      - |-
-        {{ .CONTAINER_BUILDER }} run \
-          -it \
-          --rm \
-          --security-opt seccomp=unconfined \
-          --security-opt apparmor=unconfined \
-          -e BUILDKITD_FLAGS=--oci-worker-no-process-sandbox \
-          -v {{ .TASK_DIR }}:/tmp/work \
-          --entrypoint buildctl-daemonless.sh \
-          moby/buildkit:latest \
-          build \
-          --local context=/tmp/work \
-          --local dockerfile=/tmp/work \
-          {{ join " " .BUILDKIT_BUILD_ARGS }}
-
-  load:
-    deps:
-      - build
-    sources:
-      - build/icaros.tar
-    cmds:
-      - '{{ .CONTAINER_BUILDER }} load --input build/icaros.tar'
+      - for:
+          - 0-toolchain
+        task: build:{{ .ITEM }}
 
   test:
     aliases:
       - default
     deps:
-      - load
+      - build
     cmds:
-      - '{{ .CONTAINER_BUILDER }} run --rm docker.io/library/icaros:latest'
+      - "{{ .CONTAINER_BUILDER }} run --rm docker.io/icaros/0-toolchain:latest"
+
+  clean:
+    cmds:
+      - rm -r {{ .TASK_DIR }}/build
