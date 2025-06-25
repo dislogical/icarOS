@@ -1,0 +1,57 @@
+name: On Commit CI
+on:
+  - push
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      # TODO: Move this to it's own repo
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: dislogical/autolab
+          path: .deps/autolab
+          sparse-checkout: |
+            .github/actions
+
+      - uses: ./.deps/autolab/.github/actions/setup-homebrew
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Hadolint
+        run: find . -name 'Containerfile' -exec hadolint {} \;
+
+  build:
+    name: Build - ${{ matrix.runtime.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runtime:
+          - name: Docker
+            exe: docker
+          - name: Podman
+            exe: podman
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      # TODO: Move this to it's own repo
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: dislogical/autolab
+          path: .deps/autolab
+          sparse-checkout: |
+            .github/actions
+
+      - uses: ./.deps/autolab/.github/actions/setup-homebrew
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Run Build
+        run: task CONTAINER_BUILDER=${{ matrix.runtime.exe }}

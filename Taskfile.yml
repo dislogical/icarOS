@@ -9,33 +9,26 @@ shopt: [globstar]
 
 vars:
   CONTAINER_BUILDER: '{{ .CONTAINER_BUILDER | default "podman" }}'
+  CONTAINER_BUILDER_ARGS: ""
   DAEMON_CONTAINER_NAME: buildkitd
 
 tasks:
   start-buildkitd:
     cmds:
-      - "{{ .CONTAINER_BUILDER }} run -d --name {{ .DAEMON_CONTAINER_NAME }} --privileged moby/buildkit:latest"
+      - "{{ .CONTAINER_BUILDER }} {{.CONTAINER_BUILDER_ARGS}} run -d --name {{ .DAEMON_CONTAINER_NAME }} --privileged moby/buildkit:latest"
     # Don't run if daemonless is set or container already exists
     status:
-      - "{{ .CONTAINER_BUILDER }} container inspect {{ .DAEMON_CONTAINER_NAME }} | jq -e '.[0].State.Running'"
-
-  mkdir-build:
-    cmds:
-      - mkdir {{ .TASK_DIR }}/build
-    status:
-      - "[ -d {{ .TASK_DIR }}/build ]"
+      - "{{ .CONTAINER_BUILDER }} {{.CONTAINER_BUILDER_ARGS}} container inspect {{ .DAEMON_CONTAINER_NAME }} | jq -e '.[0].State.Running'"
 
   build:*:
     vars:
       NAME: "{{ index .MATCH 0 }}"
+      # TODO: this will need to be OCI at some point
+      OUTPUT_TYPE: docker
     label: build:{{ .NAME }}
     prefix: build:{{ .NAME }}
-    deps:
-      - mkdir-build
     sources:
       - "{{ .NAME }}/Containerfile"
-    generates:
-      - "{{ .TASK_DIR }}/build/{{ .NAME }}.tar"
     cmds:
       - |-
         buildctl \
@@ -46,16 +39,14 @@ tasks:
           --opt source=docker/dockerfile:1.17 \
           --local context=stages/{{ .NAME }} \
           --local dockerfile=stages/{{ .NAME }} \
-          --output type=oci,name=icaros/{{ .NAME }},dest={{ .TASK_DIR }}/build/{{ .NAME }}.tar
-      - "{{ .CONTAINER_BUILDER }} load --input {{ .TASK_DIR }}/build/{{ .NAME }}.tar"
+          --output type={{.OUTPUT_TYPE}},name=icaros/{{ .NAME }}:latest \
+            | {{ .CONTAINER_BUILDER }} load
 
   build:
     deps:
       - start-buildkitd
     sources:
-      - Containerfile
-    generates:
-      - build/icaros.tar
+      - "**/Containerfile"
     cmds:
       - for:
           - 0-toolchain
@@ -67,8 +58,8 @@ tasks:
     deps:
       - build
     cmds:
-      - "{{ .CONTAINER_BUILDER }} run --rm docker.io/icaros/0-toolchain:latest"
+      - "{{ .CONTAINER_BUILDER }} run --rm icaros/0-toolchain:latest"
 
   clean:
     cmds:
-      - rm -r {{ .TASK_DIR }}/build
+      - rm -r .task
