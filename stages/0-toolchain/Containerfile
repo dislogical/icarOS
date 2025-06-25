@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.17@sha256:38387523653efa0039f8e1c89bb74a30504e76ee9f565e25c9a09841f9427b05
 
-FROM silkeh/clang:20
+FROM silkeh/clang:20@sha256:09bab02cd758b925660937e4ff96d62239189c2d2e597370951e8c6fca53513b
 
 CMD [ "clang", "--version" ]
