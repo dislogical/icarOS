@@ -24,7 +24,10 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Hadolint
-        run: find . -name 'Containerfile' -exec hadolint {} \;
+        run: find . -name 'Containerfile' -exec hadolint {} \; >> $GITHUB_STEP_SUMMARY
+
+      - name: Shellcheck
+        run: shellcheck **/*.sh >> $GITHUB_STEP_SUMMARY
 
   build:
     name: Build - ${{ matrix.runtime.name }}

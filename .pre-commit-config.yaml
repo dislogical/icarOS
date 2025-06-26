@@ -13,6 +13,7 @@ default_install_hook_types:
 ci:
   skip:
     - hadolint
+    - shellcheck
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -50,3 +51,8 @@ repos:
     rev: v2.12.0
     hooks:
       - id: hadolint
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
