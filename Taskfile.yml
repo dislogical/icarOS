@@ -49,7 +49,7 @@ tasks:
             | {{ .CONTAINER_BUILDER }} load
 
   build:
-    deps:
+    cmds:
       - for:
           var: STAGES
         task: build:{{ .ITEM }}
