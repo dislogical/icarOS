@@ -1,5 +1,20 @@
 # syntax=docker/dockerfile:1.17@sha256:38387523653efa0039f8e1c89bb74a30504e76ee9f565e25c9a09841f9427b05
 
-FROM silkeh/clang:20@sha256:09bab02cd758b925660937e4ff96d62239189c2d2e597370951e8c6fca53513b
+FROM debian:12
+
+ARG LLVM_VERSION=20
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+    git=1:2.39.5-* make=4.3-* flex=2.6.4-* bison=2:3.8.2+dfsg-* bc=1.07.1-* libelf-dev=0.188-* libssl-dev=3.0.16-* \
+    lsb-release=12.0-* software-properties-common=0.99.30-* gnupg=2.2.40-* wget=1.21.3-* \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN bash -c "$(wget -q -O - https://apt.llvm.org/llvm.sh)" _ ${LLVM_VERSION} all \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY update-alternatives-clang.sh /
+
+RUN /update-alternatives-clang.sh ${LLVM_VERSION} 20
 
 CMD [ "clang", "--version" ]
