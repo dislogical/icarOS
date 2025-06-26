@@ -12,27 +12,62 @@ vars:
     - 0-toolchain
 
   CONTAINER_BUILDER: '{{ .CONTAINER_BUILDER | default "podman" }}'
-  CONTAINER_BUILDER_ARGS: ""
-  DAEMON_CONTAINER_NAME: buildkitd
+  NETWORK_NAME: icaros
+  DAEMON_CONTAINER_NAME: icaros-buildkitd
+  REGISTRY_CONTAINER_NAME: icaros-registry
+  REGISTRY_PORT: "{{.REGISTRY_PORT|default 5000}}"
 
 tasks:
-  start-buildkitd:
+  create-network:
+    internal: true
+    run: once
     cmds:
-      - "{{ .CONTAINER_BUILDER }} {{.CONTAINER_BUILDER_ARGS}} run -d --name {{ .DAEMON_CONTAINER_NAME }} --privileged moby/buildkit:latest"
-    # Don't run if daemonless is set or container already exists
+      - "{{ .CONTAINER_BUILDER }} network create {{.NETWORK_NAME}}"
     status:
-      - "{{ .CONTAINER_BUILDER }} {{.CONTAINER_BUILDER_ARGS}} container inspect {{ .DAEMON_CONTAINER_NAME }} | jq -e '.[0].State.Running'"
+      - "{{ .CONTAINER_BUILDER }} network inspect {{.NETWORK_NAME}}"
+
+  start-buildkitd:
+    internal: true
+    run: once
+    deps:
+      - create-network
+    cmds:
+      - |-
+        {{ .CONTAINER_BUILDER }} run -d --pull=missing \
+        --network {{.NETWORK_NAME}} \
+        --name {{ .DAEMON_CONTAINER_NAME }} \
+        --privileged \
+        --volume ./buildkitd.toml:/etc/buildkitd.toml:ro \
+        moby/buildkit:latest \
+          --config=/etc/buildkitd.toml
+    status:
+      - "{{ .CONTAINER_BUILDER }} container inspect {{ .DAEMON_CONTAINER_NAME }} | jq -e '.[0].State.Running'"
+
+  start-registry:
+    internal: true
+    run: once
+    deps:
+      - create-network
+    cmds:
+      - |-
+        {{ .CONTAINER_BUILDER }} run -d --pull=missing \
+        --network {{.NETWORK_NAME}} \
+        --name {{ .REGISTRY_CONTAINER_NAME }} \
+        -p {{.REGISTRY_PORT}}:5000 \
+        registry:3
+    status:
+      - "{{ .CONTAINER_BUILDER }} container inspect {{ .REGISTRY_CONTAINER_NAME }} | jq -e '.[0].State.Running'"
 
   # Each stage is expected to output an image with the name "icaros/{{.NAME}}:latest"
   build:*:
     vars:
       NAME: "{{ index .MATCH 0 }}"
-      # TODO: this will need to be OCI at some point
-      OUTPUT_TYPE: docker
+      OUTPUT_NAME: "{{.REGISTRY_CONTAINER_NAME}}:{{.REGISTRY_PORT}}/icaros/{{ .NAME }}:latest"
     label: build:{{ .NAME }}
     prefix: build:{{ .NAME }}
     deps:
       - start-buildkitd
+      - start-registry
     sources:
       - "{{ .NAME }}/Containerfile"
     cmds:
@@ -43,13 +78,15 @@ tasks:
           --frontend gateway.v0 \
           --opt filename=Containerfile \
           --opt source=docker/dockerfile:1.17 \
+          --export-cache type=inline \
+          --import-cache type=registry,ref={{.OUTPUT_NAME}} \
           --local context=stages/{{ .NAME }} \
           --local dockerfile=stages/{{ .NAME }} \
-          --output type={{.OUTPUT_TYPE}},name=icaros/{{ .NAME }}:latest \
+          --output type=docker,name={{.OUTPUT_NAME}},push=true \
             | {{ .CONTAINER_BUILDER }} load
 
   build:
-    deps:
+    cmds:
       - for:
           var: STAGES
         task: build:{{ .ITEM }}
@@ -60,8 +97,8 @@ tasks:
     deps:
       - build
     cmds:
-      - "{{ .CONTAINER_BUILDER }} run --rm icaros/0-toolchain:latest"
+      - "{{ .CONTAINER_BUILDER }} run --rm {{.REGISTRY_CONTAINER_NAME}}:5000/icaros/{{last .STAGES}}:latest"
 
   clean:
     cmds:
-      - rm -r .task
+      - rm -r .task || true

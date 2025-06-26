@@ -1,0 +1,2 @@
+[registry."icaros-registry:5000"]
+  http = true
