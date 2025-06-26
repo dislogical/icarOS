@@ -64,4 +64,4 @@ tasks:
 
   clean:
     cmds:
-      - rm -r .task
+      - rm -r .task || true
