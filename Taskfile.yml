@@ -16,6 +16,7 @@ vars:
   DAEMON_CONTAINER_NAME: icaros-buildkitd
   REGISTRY_CONTAINER_NAME: icaros-registry
   REGISTRY_PORT: "{{.REGISTRY_PORT|default 5000}}"
+  PUSH_FLAGS: '{{if (eq .CONTAINER_BUILDER "podman")}}--tls-verify=false{{end}}'
 
 tasks:
   create-network:
@@ -62,7 +63,8 @@ tasks:
   build:*:
     vars:
       NAME: "{{ index .MATCH 0 }}"
-      OUTPUT_NAME: "{{.REGISTRY_CONTAINER_NAME}}:{{.REGISTRY_PORT}}/icaros/{{ .NAME }}:latest"
+      OUTPUT_NAME_CONTAINER: "{{.REGISTRY_CONTAINER_NAME}}:{{.REGISTRY_PORT}}/icaros/{{ .NAME }}:latest"
+      OUTPUT_NAME_LOCAL: "localhost:{{.REGISTRY_PORT}}/icaros/{{ .NAME }}:latest"
     label: build:{{ .NAME }}
     prefix: build:{{ .NAME }}
     deps:
@@ -79,11 +81,15 @@ tasks:
           --opt filename=Containerfile \
           --opt source=docker/dockerfile:1.17 \
           --export-cache type=inline \
-          --import-cache type=registry,ref={{.OUTPUT_NAME}} \
+          --import-cache type=registry,ref={{.OUTPUT_NAME_CONTAINER}} \
           --local context=stages/{{ .NAME }} \
           --local dockerfile=stages/{{ .NAME }} \
-          --output type=docker,name={{.OUTPUT_NAME}},push=true \
+          --output type=docker,\"name={{.OUTPUT_NAME_CONTAINER}},{{.OUTPUT_NAME_LOCAL}}\",push=true \
             | {{ .CONTAINER_BUILDER }} load
+      - |-
+        {{.CONTAINER_BUILDER}} push \
+          {{.PUSH_FLAGS}} \
+          {{.OUTPUT_NAME_LOCAL}}
 
   build:
     cmds:
