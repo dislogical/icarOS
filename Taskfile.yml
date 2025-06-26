@@ -65,6 +65,9 @@ tasks:
       NAME: "{{ index .MATCH 0 }}"
       OUTPUT_NAME_CONTAINER: "{{.REGISTRY_CONTAINER_NAME}}:{{.REGISTRY_PORT}}/icaros/{{ .NAME }}:latest"
       OUTPUT_NAME_LOCAL: "localhost:{{.REGISTRY_PORT}}/icaros/{{ .NAME }}:latest"
+
+      EXPORT_CACHE: '{{if (env "GITHUB_ACTIONS")}}"type=gha"{{else}}"type=inline"{{end}}'
+      IMPORT_CACHE: '{{if (env "GITHUB_ACTIONS")}}"type=gha"{{else}}"type=registry,ref={{.OUTPUT_NAME_CONTAINER}}"{{end}}'
     label: build:{{ .NAME }}
     prefix: build:{{ .NAME }}
     deps:
@@ -80,8 +83,8 @@ tasks:
           --frontend gateway.v0 \
           --opt filename=Containerfile \
           --opt source=docker/dockerfile:1.17 \
-          --export-cache type=inline \
-          --import-cache type=registry,ref={{.OUTPUT_NAME_CONTAINER}} \
+          --export-cache {{.EXPORT_CACHE}} \
+          --import-cache {{.IMPORT_CACHE}} \
           --local context=stages/{{ .NAME }} \
           --local dockerfile=stages/{{ .NAME }} \
           --output type=docker,\"name={{.OUTPUT_NAME_CONTAINER}},{{.OUTPUT_NAME_LOCAL}}\",push=true \

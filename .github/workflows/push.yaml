@@ -53,5 +53,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
 
+      - name: Expose GitHub Runtime Variables
+        uses: crazy-max/ghaction-github-runtime@v3
+
       - name: Run Build
         run: task CONTAINER_BUILDER=${{ matrix.runtime.exe }}
