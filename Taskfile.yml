@@ -60,7 +60,7 @@ tasks:
     deps:
       - build
     cmds:
-      - "{{ .CONTAINER_BUILDER }} run --rm icaros/0-toolchain:latest"
+      - "{{ .CONTAINER_BUILDER }} run --rm icaros/{{last .STAGES}}:latest"
 
   clean:
     cmds:
