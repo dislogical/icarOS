@@ -10,6 +10,7 @@ shopt: [globstar]
 vars:
   STAGES:
     - 0-toolchain
+    - 1-kernel
 
   CONTAINER_BUILDER: '{{ .CONTAINER_BUILDER | default "podman" }}'
   NETWORK_NAME: icaros

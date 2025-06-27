@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1.17@sha256:38387523653efa0039f8e1c89bb74a30504e76ee9f565e25c9a09841f9427b05
+
+FROM icaros-registry:5000/icaros/0-toolchain
+
+ARG KERNEL_VERSION="v6.15.3"
+
+RUN git clone --branch=${KERNEL_VERSION} --depth=1 \
+    https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
+
+WORKDIR /linux
+
+RUN make LLVM=1 -j "$(nproc)" defconfig
+
+RUN make LLVM=1 -j "$(nproc)"
+
+CMD [ "true" ]
