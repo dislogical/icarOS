@@ -9,7 +9,11 @@ RUN git clone --branch=${KERNEL_VERSION} --depth=1 \
 
 WORKDIR /linux
 
+COPY base.config .
+
 RUN make LLVM=1 -j "$(nproc)" defconfig
+
+RUN cat base.config >> .config
 
 RUN make LLVM=1 -j "$(nproc)"
 
